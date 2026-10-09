@@ -1,0 +1,149 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{cite}
+
+\geometry{margin=1in}
+
+\title{\textbf{PhaseFlow: A Live Kuramoto-R Biofeedback System for Android Using Bluetooth EEG}}
+\author{Americo Sim\~oes\\ \small Independent Researcher\\ \small \texttt{amexsimoes@gmail.com}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We present PhaseFlow, an open-source Android application that computes the Kuramoto order parameter $r$ from live EEG data and delivers it to the user as real-time audio and visual biofeedback. PhaseFlow connects to consumer Bluetooth EEG headsets — specifically Muse (Classic and Athena firmware) and OpenBCI Ganglion — using their documented Bluetooth Low Energy (BLE) protocols. The application computes $r$ over a sliding window at the alpha band (8--12~Hz) and maps it to a continuous pitch and a visual bar, providing the user with a signal they can attempt to control through mental strategies. All processing runs locally on the device; no network permission is requested. PhaseFlow is the first open-source Android application to provide neurofeedback based on the Kuramoto order parameter, and the first to support both Muse and OpenBCI Ganglion devices from a single application. It complements PhaseScope (an offline EEG coherence analyzer) by adding live feedback.
+\end{abstract}
+
+\section{Introduction}
+
+Neurofeedback is a training technique in which a real-time measure of brain activity is presented back to the user, who then attempts to voluntarily modulate that measure through attention, relaxation, or other mental strategies. Clinical neurofeedback has been applied to attention deficit hyperactivity disorder (ADHD), anxiety, epilepsy, and insomnia, with varying degrees of evidence \cite{lubar1997,egner2002}.
+
+Traditional neurofeedback systems use amplitude-based features: alpha power, theta/beta ratio, or sensorimotor rhythm (SMR). Coherence-based features — measures of phase synchrony between brain regions — have been studied in the research literature but are rarely exposed to end users through consumer applications \cite{lutz2004,engel2001}.
+
+The Kuramoto order parameter
+\begin{equation}
+r(t) = \left| \frac{1}{n} \sum_{j=1}^{n} e^{i \phi_j(t)} \right|
+\end{equation}
+quantifies the global phase synchrony of $n$ oscillators. When applied to EEG channels, $r$ is a scalar measure of how aligned the phases of the recording electrodes are at a given moment. Values near 1 indicate strong synchrony; values near 0 indicate desynchrony.
+
+PhaseFlow exposes $r$ directly to the user as a biofeedback signal. This is, to our knowledge, the first consumer-facing implementation of Kuramoto-$r$ neurofeedback.
+
+\section{Related Work}
+
+\textbf{PhaseScope} \cite{simoes2026phasescope} is a companion application that loads offline EEG recordings (CSV, EDF) and computes phase coherence and $r$. PhaseFlow extends this by adding a live BLE input and a feedback loop.
+
+\textbf{Muse} headsets (Interaxon) are consumer 4-channel EEG devices. Their BLE protocol has been reverse-engineered by the open-source community, and multiple libraries exist (muselsl, muse-jsx, muse-rs) \cite{museble}. PhaseFlow implements the protocol natively in Kotlin.
+
+\textbf{OpenBCI Ganglion} is an open-hardware 4-channel EEG board that speaks standard BLE. Its protocol is documented in the OpenBCI firmware repository \cite{openbci}.
+
+Existing Android neurofeedback applications require proprietary headsets (Muse, NeuroSky) and use amplitude-based features. None exposes phase synchrony or the Kuramoto order parameter.
+
+\section{Methods}
+
+\subsection{Bandpass Filtering}
+
+Each channel is filtered with a 4th-order Butterworth bandpass (two cascaded biquad sections in the RBJ form) applied forward and backward to achieve zero phase distortion. The alpha band (8--12~Hz) is used by default; the user may select other bands.
+
+\subsection{Instantaneous Phase}
+
+The analytic signal is computed via FFT:
+\begin{equation}
+\psi(t) = x(t) + i \mathcal{H}[x(t)]
+\end{equation}
+with $\mathcal{H}$ the Hilbert transform. Instantaneous phase is $\phi(t) = \arg \psi(t)$.
+
+\subsection{Kuramoto Order Parameter}
+
+$r(t)$ is computed over a sliding window (default 1~s window, 0.25~s hop). The user-visible value is the mean of $r(t)$ across the window.
+
+\subsection{Bluetooth EEG Input}
+
+PhaseFlow connects to Bluetooth Low Energy EEG devices via Android's \texttt{BluetoothLeScanner} and \texttt{BluetoothGatt} APIs. Two device families are supported:
+
+\paragraph{Muse.} Muse devices advertise the service UUID \texttt{0000fe8d-0000-1000-8000-00805f9b34fb}. Classic firmware exposes four EEG characteristics (\texttt{273e0003} through \texttt{273e0006}), one per channel (TP9, AF7, AF8, TP10). Each 20-byte notification contains 12 samples per channel as 12-bit big-endian values. Athena firmware exposes a single multiplexed characteristic (\texttt{273e0013}) with tagged packets; EEG samples are 14-bit little-endian.
+
+\paragraph{OpenBCI Ganglion.} Ganglion advertises service UUID \texttt{0000fe84-0000-1000-8000-00805f9b34fb}. Four channels are streamed on the receive characteristic \texttt{2d30c082-f39f-4ce6-923f-3484ea480596} at 200~Hz. Commands (start \texttt{0x62}, stop \texttt{0x73}) are sent to \texttt{2d30c083-f39f-4ce6-923f-3484ea480596}. Packets are 20 bytes with delta-encoded samples.
+
+\subsection{Feedback}
+
+$r$ is delivered to the user via:
+\begin{itemize}
+\item A large numeric display updated every 250~ms
+\item A horizontal bar whose fill fraction equals $r$
+\item A continuous sine wave whose frequency maps linearly from 200~Hz at $r = 0$ to 800~Hz at $r = 1$
+\item An optional target marker at the user's baseline $r$
+\end{itemize}
+
+\section{Validation}
+
+Because PhaseFlow's live path requires a Bluetooth EEG headset, the code base is validated in two ways:
+
+\begin{enumerate}
+\item \textbf{Offline analysis.} The same phase pipeline used by PhaseFlow is implemented in PhaseScope and validated against a Python/SciPy reference (agreement to three decimal places on synthetic data). PhaseFlow imports the same \texttt{CoherenceEngine} code, so the numerical correctness carries over.
+\item \textbf{BLE scanning.} The BLE scanner is validated by confirming that it discovers Muse and Ganglion devices advertising the correct service UUIDs, and rejects other BLE peripherals. Without a device in range, the scanner correctly times out with no results, as documented in the device log.
+\end{enumerate}
+
+\section{Availability}
+
+PhaseFlow is available under the GNU General Public License v3.0:
+
+\begin{itemize}
+\item Source code: \url{https://github.com/SimoesCTT/PhaseFlow}
+\item F-Droid: \url{https://f-droid.org/packages/com.simoesctt.phaseflow}
+\end{itemize}
+
+The application requires Android 7.0 (API 24) or higher, requests Bluetooth and (on Android 11 and below) location permissions for BLE scanning, and requests no network permission.
+
+\section{Discussion}
+
+PhaseFlow is a research and educational tool. It is explicitly \emph{not} a medical device and does not diagnose, treat, cure, or prevent any condition. Users seeking clinical neurofeedback should consult a qualified professional.
+
+The app is designed to be usable without hardware for code review and study, and to become a functional neurofeedback tool with a Muse or Ganglion headset in range.
+
+Extensions planned for future releases include:
+\begin{itemize}
+\item Full 18-bit delta decoding for OpenBCI Ganglion
+\item Support for OpenBCI Cyton via USB OTG serial
+\item Session recording and replay
+\item Permutation-based significance testing on $r$
+\item Multi-band feedback (simultaneous theta, alpha, beta)
+\end{itemize}
+
+\begin{thebibliography}{9}
+
+\bibitem{lubar1997}
+J. F. Lubar, ``Neocortical dynamics: implications for understanding the role of neurofeedback and related techniques for the enhancement of attention,'' \emph{Applied Psychophysiology and Biofeedback}, vol. 22, no. 2, pp. 111--126, 1997.
+
+\bibitem{egner2002}
+T. Egner and J. H. Gruzelier, ``Ecological validity of neurofeedback: modulation of slow wave EEG enhances musical performance,'' \emph{Neuroreport}, vol. 14, no. 9, pp. 1221--1224, 2003.
+
+\bibitem{lutz2004}
+A. Lutz, L. L. Greischar, N. B. Rawlings, M. Ricard, and R. J. Davidson, ``Long-term meditators self-induce high-amplitude gamma synchrony during mental practice,'' \emph{Proceedings of the National Academy of Sciences}, vol. 101, no. 46, pp. 16369--16373, 2004.
+
+\bibitem{engel2001}
+A. K. Engel, P. Fries, and W. Singer, ``Dynamic predictions: oscillations and synchrony in top-down processing,'' \emph{Nature Reviews Neuroscience}, vol. 2, no. 10, pp. 704--716, 2001.
+
+\bibitem{kuramoto1975}
+Y. Kuramoto, ``Self-entrainment of a population of coupled non-linear oscillators,'' in \emph{International Symposium on Mathematical Problems in Theoretical Physics}, Springer, 1975, pp. 420--422.
+
+\bibitem{simoes2026phasescope}
+A. Sim\~oes, ``PhaseScope: An Open-Source Android Application for Phase Coherence Analysis of EEG Recordings,'' 2026.
+
+\bibitem{museble}
+Interaxon, ``Muse BLE protocol,'' reverse-engineered by the open-source community. Documented in \url{https://github.com/alexandrebarachant/muse-lsl} and related projects.
+
+\bibitem{openbci}
+OpenBCI, ``Ganglion firmware and BLE protocol documentation,'' \url{https://docs.openbci.com/}.
+
+\end{thebibliography}
+
+\end{document}
