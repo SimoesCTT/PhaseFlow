@@ -1,0 +1,22 @@
+A live Kuramoto-r biofeedback system for Android, using Bluetooth EEG.
+
+Connects to Muse (Classic and Athena firmware) and OpenBCI Ganglion headsets
+over Bluetooth Low Energy, streams 4-channel EEG, and computes the Kuramoto
+order parameter r over a sliding window. r is delivered to the user as
+real-time audio and visual feedback.
+
+Features:
+* Bluetooth Low Energy connection to Muse and OpenBCI Ganglion
+* 4-channel EEG at 256 Hz (Muse) or 200 Hz (Ganglion)
+* 4th-order Butterworth bandpass (alpha band by default)
+* Hilbert transform, instantaneous phase
+* Live Kuramoto order parameter r
+* Audio feedback - sine tone, pitch mapped to r
+* Visual feedback - bar and numeric display
+* Automatic baseline capture
+* No INTERNET permission
+
+Research and educational tool. Not a medical device. Does not diagnose,
+treat, cure, or prevent any condition.
+
+License: GPL-3.0-or-later

@@ -1,0 +1,1 @@
+Live Kuramoto-r biofeedback from Bluetooth EEG (Muse, OpenBCGanglion).

@@ -1,0 +1,5 @@
+Initial release.
+* BLE scanning for Muse and OpenBCI Ganglion
+* Live EEG streaming
+* Kuramoto order parameter, live
+* Audio and visual biofeedback
